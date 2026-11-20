@@ -1,0 +1,44 @@
+# ============================================================
+# 智能日报生成器配置模板
+# ------------------------------------------------------------
+# 使用方式：复制本文件为 config.yaml 后按团队实际情况填写。
+#   - config.yaml 不入库（见 .gitignore），修改后下次执行自动生效
+#   - 敏感凭据（GitHub token、飞书应用凭据、SMTP 账号密码）一律放 .env，
+#     不写入本文件（design.md §6.2）
+# ============================================================
+
+# 团队名称（用于日报标题与推送文案）
+team_name: "示例团队"
+
+# GitHub 仓库列表（owner/repo 格式）；只采集此处明确列出的仓库（design.md §6.2）
+repos:
+  - "your-org/your-repo"
+
+# 飞书群组列表：chat_id 为群聊标识，name 用于日报中展示消息来源
+chats:
+  - chat_id: "oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    name: "示例项目群"
+
+# 飞书项目 ID（任务状态变更采集用，对应 design.md §4.1 lark_task.collect 入参）
+lark_project_id: "your-project-id"
+
+# 消息采集关键词：仅采集包含以下关键词之一的群消息（proposal §2.1）
+message_keywords:
+  - "进度"
+  - "上线"
+  - "联调"
+
+# 敏感关键词：命中以下关键词的消息直接过滤，不出现在日报中（design.md §6.2）
+sensitive_keywords:
+  - "薪资"
+  - "绩效"
+  - "裁员"
+
+# 成员映射表：同一成员在各系统中的账号关联（design.md §3.3）
+members:
+  - name: "张三"
+    github: "zhangsan"
+    lark: "zhangsan@company.com"
+  - name: "李四"
+    github: "lisi-dev"
+    lark: "lisi@company.com"

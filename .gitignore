@@ -1,0 +1,21 @@
+# 敏感凭据与真实配置（CLAUDE.md 禁止提交清单；design.md §6.2）
+.env
+config.yaml
+
+# 运行数据（SQLite 数据库与运行产物）
+data/
+
+# Python 产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 虚拟环境
+.venv/
+
+# 工具缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
