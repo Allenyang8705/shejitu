@@ -3,11 +3,10 @@
 获取指定仓库在时间窗口内的 commit 记录，并逐条补齐变更统计（列表接口
 不含 additions / deletions / files_changed，需请求单提交详情）。
 
-失败语义（对 tasks.md T3「仍失败返回空列表」字面行为的修正）：
-- 单仓库失败：记录 ERROR 日志并跳过，不阻断同批其他仓库（proposal 3.2）；
-- 全部仓库失败：抛出 CollectorError。若此时仍返回空列表，编排层将无法
-  区分「采集失败」与「采集成功但无提交」，proposal 3.2 要求的
-  「日报中标注数据获取失败」就不可能实现。
+失败语义（design.md §3.1 CollectResult / §4.1）：失败作为数据返回而非控制流。
+单仓库失败记录 ERROR 日志并进入 failed_targets，不阻断其他仓库；
+编排层依据 failed_targets 标注「数据获取失败」，并可区分部分失败与全部失败。
+CollectorError 仅用于契约违规（如参数不带时区）等程序性错误。
 """
 
 import os
@@ -19,7 +18,7 @@ import httpx
 
 from shared import logger
 from shared.errors import CollectorError, call_with_retry
-from shared.models import CommitRecord
+from shared.models import CollectResult, CommitRecord
 
 GITHUB_API_BASE = "https://api.github.com"
 
@@ -153,7 +152,9 @@ def _collect_repo(
     return records
 
 
-def collect(repos: list[str], since: datetime, until: datetime) -> list[CommitRecord]:
+def collect(
+    repos: list[str], since: datetime, until: datetime
+) -> CollectResult[CommitRecord]:
     """采集时间窗口内全部仓库的 commit 记录（design.md §4.1 契约）。"""
     if since.tzinfo is None or until.tzinfo is None:
         raise CollectorError(
@@ -174,6 +175,4 @@ def collect(repos: list[str], since: datetime, until: datetime) -> list[CommitRe
                     repo=repo,
                     error=f"{type(exc).__name__}: {exc}",
                 )
-    if repos and len(failed) == len(repos):
-        raise CollectorError("github", f"全部仓库采集失败：{', '.join(failed)}")
-    return records
+    return CollectResult(records=records, failed_targets=failed)

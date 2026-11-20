@@ -101,6 +101,11 @@ MessageRecord:
     content: str         # 消息内容（纯文本）
     timestamp: datetime  # 发送时间
     chat_name: str       # 群名称
+
+# 采集结果：失败作为数据返回而非控制流，编排层据此标注「数据获取失败」
+CollectResult[T]:
+    records: list[T]           # 成功采集的记录
+    failed_targets: list[str]  # 采集失败的目标（仓库 / 项目 / 群）
 ```
 
 ### 3.2 生成层输入/输出
@@ -144,14 +149,16 @@ members:
 
 ```python
 # github.py
-def collect(repos: list[str], since: datetime, until: datetime) -> list[CommitRecord]
+def collect(repos: list[str], since: datetime, until: datetime) -> CollectResult[CommitRecord]
 
 # lark_task.py
-def collect(project_id: str, since: datetime, until: datetime) -> list[TaskRecord]
+def collect(project_id: str, since: datetime, until: datetime) -> CollectResult[TaskRecord]
 
 # lark_msg.py
-def collect(chat_id: str, keywords: list[str], since: datetime, until: datetime) -> list[MessageRecord]
+def collect(chat_id: str, keywords: list[str], since: datetime, until: datetime) -> CollectResult[MessageRecord]
 ```
+
+采集失败不抛异常：失败目标记入 `CollectResult.failed_targets`（定义见 §3.1），成功记录照常返回，部分失败因此对编排层可见（proposal 3.2 降级标注的依据）。`CollectorError` 仅用于契约违规等程序性错误（如参数不带时区）。
 
 ### 4.2 生成层接口
 
@@ -204,7 +211,7 @@ def send(report: DailyReport, chat_id: str) -> bool
 
 | 场景 | 处理方式 |
 |------|----------|
-| API 超时 | 重试 3 次（间隔 5s），仍失败标记"数据获取失败" |
+| API 超时 | 重试 3 次（间隔 5s），仍失败将目标记入 CollectResult.failed_targets |
 | 飞书 token 过期 | 自动刷新后重试 1 次 |
 | 单个数据源不可用 | 跳过并在日报中标注，其他数据源正常采集 |
 | 所有数据源不可用 | 记录错误日志 + 告警，不生成空日报 |

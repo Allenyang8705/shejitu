@@ -55,7 +55,7 @@
 - [ ] collect() 函数签名符合 design.md §4.1 的接口定义
 - [ ] 返回的每个 CommitRecord 包含全部 7 个字段且类型正确
 - [ ] 支持分页查询（GitHub API 默认每页 30 条）
-- [ ] API 超时时重试 3 次（间隔 5s），仍失败返回空列表 + 错误日志
+- [ ] API 超时时重试 3 次（间隔 5s），仍失败将仓库记入 CollectResult.failed_targets + 错误日志
 - [ ] GitHub API 限流（HTTP 403）时，等待 reset 时间后重试
 - [ ] 使用 mock 数据的单元测试全部通过
 
@@ -73,7 +73,7 @@
 - [ ] collect() 函数签名符合 design.md §4.1 的接口定义
 - [ ] 返回的每个 TaskRecord 包含全部 5 个字段且类型正确
 - [ ] 飞书 token 过期时自动刷新后重试 1 次
-- [ ] API 超时时重试 3 次，仍失败返回空列表 + 错误日志
+- [ ] API 超时时重试 3 次，仍失败将项目记入 CollectResult.failed_targets + 错误日志
 - [ ] 使用 mock 数据的单元测试全部通过
 
 ---

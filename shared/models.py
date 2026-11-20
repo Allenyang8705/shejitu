@@ -6,6 +6,7 @@ collector / generator / notifier / main 都依赖本模块；本模块保持纯�
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from typing import Generic, TypeVar
 
 
 @dataclass
@@ -40,6 +41,21 @@ class MessageRecord:
     content: str
     timestamp: datetime
     chat_name: str
+
+
+_T = TypeVar("_T")
+
+
+@dataclass
+class CollectResult(Generic[_T]):
+    """采集结果（design.md §3.1）：失败作为数据返回，而非控制流。
+
+    records 为成功采集的记录；failed_targets 列出失败的目标（仓库 / 项目 / 群），
+    编排层据此在日报中标注「数据获取失败」，并可区分部分失败与全部失败。
+    """
+
+    records: list[_T] = field(default_factory=list)
+    failed_targets: list[str] = field(default_factory=list)
 
 
 @dataclass

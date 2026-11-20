@@ -57,7 +57,7 @@ def test_collect_single_commit(monkeypatch):
         return httpx.Response(200, json=_detail())
 
     _use_client(monkeypatch, handler)
-    records = github.collect(["org/repo"], SINCE, UNTIL)
+    records = github.collect(["org/repo"], SINCE, UNTIL).records
 
     assert len(records) == 1
     assert detail_calls["n"] == 1
@@ -88,7 +88,7 @@ def test_pagination(monkeypatch):
 
     _use_client(monkeypatch, handler)
     monkeypatch.setattr(github, "_PER_PAGE", 2)
-    records = github.collect(["org/repo"], SINCE, UNTIL)
+    records = github.collect(["org/repo"], SINCE, UNTIL).records
 
     assert seen_pages == [1, 2]
     assert len(records) == 3
@@ -107,19 +107,24 @@ def test_timeout_retry_then_success(monkeypatch):
         raise AssertionError("unreachable")
 
     _use_client(monkeypatch, handler)
-    assert github.collect(["org/repo"], SINCE, UNTIL) == []
+    result = github.collect(["org/repo"], SINCE, UNTIL)
+
+    assert result.records == []
+    assert result.failed_targets == []
     assert attempts["n"] == 3
 
 
-def test_timeout_exhausted_raises(monkeypatch):
+def test_timeout_exhausted_marks_failed(monkeypatch):
     monkeypatch.setattr("shared.errors.time.sleep", lambda _: None)
 
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout(f"timeout on {request.url.path}")
 
     _use_client(monkeypatch, handler)
-    with pytest.raises(CollectorError):
-        github.collect(["org/repo"], SINCE, UNTIL)
+    result = github.collect(["org/repo"], SINCE, UNTIL)
+
+    assert result.records == []
+    assert result.failed_targets == ["org/repo"]
 
 
 def test_rate_limit_waits_then_success(monkeypatch):
@@ -136,11 +141,14 @@ def test_rate_limit_waits_then_success(monkeypatch):
         return httpx.Response(200, json=_detail())
 
     _use_client(monkeypatch, handler)
-    assert github.collect(["org/repo"], SINCE, UNTIL) == []
+    result = github.collect(["org/repo"], SINCE, UNTIL)
+
+    assert result.records == []
+    assert result.failed_targets == []
     assert attempts["n"] == 3
 
 
-def test_rate_limit_exhausted_raises(monkeypatch):
+def test_rate_limit_exhausted_marks_failed(monkeypatch):
     requests_count = {"n": 0}
     monkeypatch.setattr(github.time, "sleep", lambda _: None)
     reset_at = str(int(time.time()) + 5)
@@ -152,8 +160,9 @@ def test_rate_limit_exhausted_raises(monkeypatch):
         return httpx.Response(200, json=_detail())
 
     _use_client(monkeypatch, handler)
-    with pytest.raises(CollectorError):
-        github.collect(["org/repo"], SINCE, UNTIL)
+    result = github.collect(["org/repo"], SINCE, UNTIL)
+
+    assert result.failed_targets == ["org/repo"]
     assert requests_count["n"] == 1 + github._RATE_LIMIT_MAX_RETRIES
 
 
@@ -166,18 +175,21 @@ def test_single_repo_failure_does_not_block_others(monkeypatch):
         return httpx.Response(200, json=_detail())
 
     _use_client(monkeypatch, handler)
-    records = github.collect(["org/broken", "org/good"], SINCE, UNTIL)
-    assert [record.repo for record in records] == ["org/good"]
+    result = github.collect(["org/broken", "org/good"], SINCE, UNTIL)
+
+    assert [record.repo for record in result.records] == ["org/good"]
+    assert result.failed_targets == ["org/broken"]
 
 
-def test_all_repos_failed_raises(monkeypatch):
+def test_all_repos_failed_reported(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500)
 
     _use_client(monkeypatch, handler)
-    with pytest.raises(CollectorError) as exc_info:
-        github.collect(["org/a", "org/b"], SINCE, UNTIL)
-    assert exc_info.value.source == "github"
+    result = github.collect(["org/a", "org/b"], SINCE, UNTIL)
+
+    assert result.records == []
+    assert result.failed_targets == ["org/a", "org/b"]
 
 
 def test_window_filter_excludes_out_of_range(monkeypatch):
@@ -195,7 +207,8 @@ def test_window_filter_excludes_out_of_range(monkeypatch):
         return httpx.Response(200, json=_detail())
 
     _use_client(monkeypatch, handler)
-    records = github.collect(["org/repo"], SINCE, UNTIL)
+    records = github.collect(["org/repo"], SINCE, UNTIL).records
+
     assert [record.message for record in records] == ["feat: in-window"]
     assert detail_calls["n"] == 1
 
@@ -210,7 +223,8 @@ def test_author_fallback_when_login_missing(monkeypatch):
         return httpx.Response(200, json=_detail())
 
     _use_client(monkeypatch, handler)
-    records = github.collect(["org/repo"], SINCE, UNTIL)
+    records = github.collect(["org/repo"], SINCE, UNTIL).records
+
     assert records[0].author == "张三"
 
 
