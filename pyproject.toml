@@ -14,4 +14,16 @@ dev = [
     "mypy>=1.11",
     "pytest>=8.2",
     "ruff>=0.6",
+    "types-pyyaml>=6.0.12.20261113",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 项目根目录加入导入搜索路径，测试才能以 shared.xxx 形式导入被测模块
+pythonpath = ["."]
+
+[tool.mypy]
+# 各层目录不带 __init__.py（命名空间包），显式指定根目录作为包基准，
+# 保证 Task 9 的 `mypy main.py collector generator notifier shared` 能解析跨层导入
+mypy_path = "."
+explicit_package_bases = true
