@@ -126,3 +126,18 @@ def test_work_item_types_default_when_missing(tmp_path):
     """lark_work_item_types 未配置时回退到平台内置三类型。"""
     path = _write_config(tmp_path)
     assert load_config(path).lark_work_item_types == ["task", "bug", "story"]
+
+
+def test_invalid_holiday_date_rejected(tmp_path):
+    """节假日表里的非法日期必须在加载期报错，不留哑数据。"""
+    path = _write_config(tmp_path, holidays=["2026-13-01"])
+    with pytest.raises(ConfigError, match="非法日期"):
+        load_config(path)
+
+
+def test_optional_lists_default_empty(tmp_path):
+    path = _write_config(tmp_path)
+    config = load_config(path)
+    assert config.holidays == []
+    assert config.extra_workdays == []
+    assert config.email_recipients == []

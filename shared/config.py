@@ -8,7 +8,8 @@ example 与本文件，再改调用方，避免两者脱节。tests/test_config.
 即满足 §6.3「修改 config.yaml 后下次执行自动生效」。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,10 @@ class Config:
     message_keywords: list[str]
     sensitive_keywords: list[str]
     members: list[MemberConfig]
+    # 以下为可选字段：config 未配置时取空默认值
+    email_recipients: list[str] = field(default_factory=list)
+    holidays: list[date] = field(default_factory=list)
+    extra_workdays: list[date] = field(default_factory=list)
 
 
 def _non_empty_str(value: Any, label: str) -> str:
@@ -65,6 +70,19 @@ def _str_list(value: Any, label: str) -> list[str]:
             "config", f"{label} 必须是字符串列表，当前为 {type(value).__name__}"
         )
     return [_non_empty_str(item, f"{label} 的元素") for item in value]
+
+
+def _parse_date_list(value: Any, label: str) -> list[date]:
+    """ISO 日期字符串列表 → date 列表；格式非法直接报错，不留哑数据。"""
+    dates: list[date] = []
+    for item in _str_list(value, label):
+        try:
+            dates.append(date.fromisoformat(item))
+        except ValueError as exc:
+            raise ConfigError(
+                "config", f"{label} 含非法日期：{item}（应为 YYYY-MM-DD）"
+            ) from exc
+    return dates
 
 
 def _parse_chats(value: Any) -> list[ChatConfig]:
@@ -160,6 +178,13 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
             raw["sensitive_keywords"], "配置项 sensitive_keywords"
         ),
         members=_parse_members(raw["members"]),
+        email_recipients=_str_list(
+            raw.get("email_recipients") or [], "配置项 email_recipients"
+        ),
+        holidays=_parse_date_list(raw.get("holidays") or [], "配置项 holidays"),
+        extra_workdays=_parse_date_list(
+            raw.get("extra_workdays") or [], "配置项 extra_workdays"
+        ),
     )
 
 

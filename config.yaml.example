@@ -40,6 +40,19 @@ sensitive_keywords:
   - "绩效"
   - "裁员"
 
+# 法定节假日（放假的日期，含调休放假的周末）；每年按国务院安排手工更新
+# holidays:
+#   - "2026-10-01"
+#   - "2026-10-02"
+
+# 调休补班日（需要上班的周末）
+# extra_workdays:
+#   - "2026-10-10"
+
+# 邮件推送收件人（Leader / 项目经理邮箱）；留空表示不启用邮件推送渠道
+email_recipients:
+  - "leader@example.com"
+
 # 成员映射表：同一成员在各系统中的账号关联（design.md §3.3）
 members:
   - name: "张三"
