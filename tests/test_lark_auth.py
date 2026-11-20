@@ -5,7 +5,8 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from collector.lark_auth import LarkAuth
+from collector import lark_auth
+from collector.lark_auth import LarkAuth, LarkTenantAuth
 from shared.errors import CollectorError
 
 TOKEN_PATH = "/open_api/auth/v3/plugin_token"
@@ -188,4 +189,41 @@ def test_from_env_validates_credentials(monkeypatch):
     monkeypatch.setenv("LARK_USER_KEY", "user-key")
     auth = LarkAuth.from_env()
     assert auth._user_headers == {"X-USER-KEY": "user-key"}
+    auth.close()
+
+
+def test_tenant_auth_token_and_bearer_header():
+    """主平台 tenant_access_token：Bearer 头 + 顶层响应字段 + 缓存。"""
+    token_posts = {"n": 0}
+    messages_path = "/open-apis/im/v1/messages"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/open-apis/auth/v3/tenant_access_token/internal":
+            token_posts["n"] += 1
+            return httpx.Response(
+                200,
+                json={
+                    "code": 0,
+                    "tenant_access_token": f"t-{token_posts['n']}",
+                    "expire": 7200,
+                },
+            )
+        if request.url.path == messages_path:
+            return httpx.Response(200, json={"code": 0, "data": {"items": []}})
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    auth = LarkTenantAuth(
+        httpx.Client(
+            base_url=lark_auth.MAIN_OPENAPI_BASE,
+            transport=httpx.MockTransport(handler),
+            timeout=10.0,
+        ),
+        "app-id",
+        "app-secret",
+    )
+    payload = auth.api_request("GET", messages_path, params={"a": "1"})
+    assert payload["data"]["items"] == []
+    assert token_posts["n"] == 1
+    auth.api_request("GET", messages_path, params={"a": "1"})
+    assert token_posts["n"] == 1  # token 已缓存，不重复获取
     auth.close()
