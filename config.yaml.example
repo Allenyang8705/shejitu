@@ -22,6 +22,12 @@ chats:
 # 飞书项目 ID（任务状态变更采集用，对应 design.md §4.1 lark_task.collect 入参）
 lark_project_id: "your-project-id"
 
+# 飞书项目工作项类型（OpenAPI 查询按类型进行；缺省用平台内置三类型 task/bug/story）
+lark_work_item_types:
+  - "task"
+  - "bug"
+  - "story"
+
 # 消息采集关键词：仅采集包含以下关键词之一的群消息（proposal §2.1）
 message_keywords:
   - "进度"

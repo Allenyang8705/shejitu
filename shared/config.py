@@ -18,6 +18,9 @@ from shared.errors import ConfigError
 
 DEFAULT_CONFIG_PATH = "config.yaml"
 
+# 飞书项目工作项类型（OpenAPI 查询按类型进行；配置缺省时用平台内置三类型）
+DEFAULT_WORK_ITEM_TYPES = ("task", "bug", "story")
+
 
 @dataclass
 class ChatConfig:
@@ -42,6 +45,7 @@ class Config:
 
     team_name: str
     lark_project_id: str
+    lark_work_item_types: list[str]
     repos: list[str]
     chats: list[ChatConfig]
     message_keywords: list[str]
@@ -144,6 +148,10 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
         team_name=_non_empty_str(raw["team_name"], "配置项 team_name"),
         lark_project_id=_non_empty_str(
             raw["lark_project_id"], "配置项 lark_project_id"
+        ),
+        lark_work_item_types=_str_list(
+            raw.get("lark_work_item_types") or list(DEFAULT_WORK_ITEM_TYPES),
+            "配置项 lark_work_item_types",
         ),
         repos=_str_list(raw["repos"], "配置项 repos"),
         chats=_parse_chats(raw["chats"]),

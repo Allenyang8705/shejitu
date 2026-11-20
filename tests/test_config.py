@@ -120,3 +120,9 @@ def test_get_config_caches_until_reset(tmp_path):
     reset_config()
     assert get_config(path) is not first
     reset_config()
+
+
+def test_work_item_types_default_when_missing(tmp_path):
+    """lark_work_item_types 未配置时回退到平台内置三类型。"""
+    path = _write_config(tmp_path)
+    assert load_config(path).lark_work_item_types == ["task", "bug", "story"]
