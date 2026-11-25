@@ -21,6 +21,7 @@ from generator.formatter import generate
 from notifier import email, lark_bot
 from shared import logger
 from shared.config import Config, get_config
+from shared.envfile import load_env_file
 from shared.errors import AutoDailyError
 from shared.models import (
     CollectResult,
@@ -35,6 +36,25 @@ from shared.workday import is_workday
 _VIEW_TZ = timezone(timedelta(hours=8))  # 与 formatter 一致：受众为中国团队
 _GITHUB_CHECK_URL = "https://api.github.com/rate_limit"
 _SMTP_ENV_KEYS = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM")
+
+
+def _placeholder_fields(cfg: Config) -> list[str]:
+    """标出仍为 config.yaml.example 占位值的字段，避免拿模板去打真实 API。"""
+    fields: list[str] = []
+    if cfg.team_name == "示例团队":
+        fields.append("team_name")
+    if any("your-org/" in repo or repo.endswith("/your-repo") for repo in cfg.repos):
+        fields.append("repos")
+    if cfg.lark_project_id == "your-project-id":
+        fields.append("lark_project_id")
+    if any("xxxx" in chat.chat_id for chat in cfg.chats):
+        fields.append("chats")
+    if any(
+        member.github in {"zhangsan", "lisi-dev"} or member.lark.endswith("@company.com")
+        for member in cfg.members
+    ):
+        fields.append("members")
+    return fields
 
 
 def _collect_window(now_utc: datetime) -> tuple[datetime, datetime]:
@@ -203,6 +223,17 @@ def run_check() -> int:
     try:
         cfg = get_config()
         logger.info("check_config", ok=True, team=cfg.team_name)
+        placeholders = _placeholder_fields(cfg)
+        if placeholders:
+            failures += 1
+            logger.error(
+                "check_config_placeholder",
+                ok=False,
+                fields=placeholders,
+                hint="config.yaml 仍含模板占位值，请换成真实仓库、群、项目和成员",
+            )
+        else:
+            logger.info("check_config_placeholder", ok=True)
     except AutoDailyError as exc:
         logger.error("check_config", ok=False, error=exc.message)
         return 1
@@ -291,6 +322,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # 仅进程入口加载，避免 pytest 调用 main() 时读到开发者本机 .env
+    load_env_file()
     try:
         sys.exit(main())
     except AutoDailyError as exc:
