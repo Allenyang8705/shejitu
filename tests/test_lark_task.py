@@ -13,7 +13,7 @@ from shared.config import Config
 from shared.errors import CollectorError
 
 PROJECT = "proj-1"
-TOKEN_PATH = "/open_api/auth/v3/plugin_token"
+TOKEN_PATH = "/open_api/authen/plugin_token"
 QUERY_PATH = "/open_api/proj-1/work_item/query"
 SINCE = datetime(2026, 11, 20, 0, 0, tzinfo=UTC)
 UNTIL = datetime(2026, 11, 20, 23, 59, tzinfo=UTC)

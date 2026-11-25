@@ -25,9 +25,10 @@ from shared.errors import CollectorError, call_with_retry
 PROJECT_OPENAPI_BASE = "https://project.feishu.cn"
 MAIN_OPENAPI_BASE = "https://open.feishu.cn"
 
-_PLUGIN_TOKEN_PATH = "/open_api/auth/v3/plugin_token"
-# 文档检索中亦见 /auth/v3/token 与 type: 0 的旧描述；联调 404 / 参数错误时改这两处
-_TOKEN_REQUEST_TYPE = "granular"
+# 飞书项目「获取 plugin_token」：POST /open_api/authen/plugin_token
+# type 为整数：0 = 已发布插件的 plugin_access_token，1 = 未发布插件的 virtual_plugin_token
+_PLUGIN_TOKEN_PATH = "/open_api/authen/plugin_token"
+_DEFAULT_PLUGIN_TOKEN_TYPE = 0
 _TENANT_TOKEN_PATH = "/open-apis/auth/v3/tenant_access_token/internal"
 _TOKEN_REFRESH_MARGIN = 300.0  # 提前 5 分钟判定过期，避免临界失效
 
@@ -46,6 +47,46 @@ def _safe_json(response: httpx.Response) -> Any:
 
 def _field_of(payload: Any, key: str) -> Any:
     return payload.get(key) if isinstance(payload, dict) else None
+
+
+def _plugin_token_type() -> int:
+    """读取 LARK_PLUGIN_TOKEN_TYPE；未配置时用正式 plugin_access_token（type=0）。"""
+    raw = os.environ.get(
+        "LARK_PLUGIN_TOKEN_TYPE", str(_DEFAULT_PLUGIN_TOKEN_TYPE)
+    ).strip()
+    if raw not in {"0", "1"}:
+        raise CollectorError(
+            "lark_auth",
+            "环境变量 LARK_PLUGIN_TOKEN_TYPE 只能是 0（plugin_access_token）"
+            "或 1（virtual_plugin_token）",
+        )
+    return int(raw)
+
+
+def _status_of(payload: Any) -> tuple[Any, Any]:
+    """兼容顶层 code/msg 与 error.{code,msg} 两种错误包裹。"""
+    code = _field_of(payload, "code")
+    msg = _field_of(payload, "msg")
+    error = _field_of(payload, "error")
+    if isinstance(error, dict):
+        if code is None:
+            code = error.get("code")
+        if msg is None:
+            msg = error.get("msg")
+    return code, msg
+
+
+def _token_fields(payload: Any) -> tuple[Any, Any]:
+    """token 在 data 内或顶层；有效期字段为 expire_time 或 expire。"""
+    data = _field_of(payload, "data")
+    token = _field_of(data, "token") or _field_of(payload, "token")
+    expire = (
+        _field_of(data, "expire_time")
+        or _field_of(data, "expire")
+        or _field_of(payload, "expire_time")
+        or _field_of(payload, "expire")
+    )
+    return token, expire
 
 
 class _LarkApiBase:
@@ -94,7 +135,8 @@ class _LarkApiBase:
     def _is_token_invalid(self, response: httpx.Response, payload: Any) -> bool:
         if response.status_code == 401:
             return True
-        return _field_of(payload, "code") in _TOKEN_INVALID_CODES
+        code, _msg = _status_of(payload)
+        return code in _TOKEN_INVALID_CODES
 
     def api_request(
         self,
@@ -123,11 +165,8 @@ class _LarkApiBase:
                     "lark_auth", f"请求超时（已重试 3 次）：{path}"
                 ) from exc
             payload = _safe_json(response)
-            if (
-                response.status_code == 200
-                and isinstance(payload, dict)
-                and payload.get("code") in (0, None)
-            ):
+            code, msg = _status_of(payload)
+            if response.status_code == 200 and isinstance(payload, dict) and code in (0, None):
                 return payload
             if not refreshed and self._is_token_invalid(response, payload):
                 self.invalidate()
@@ -136,7 +175,7 @@ class _LarkApiBase:
             raise CollectorError(
                 "lark_auth",
                 f"飞书 API 请求失败（{self._source}）：HTTP {response.status_code}"
-                f" code={_field_of(payload, 'code')} msg={_field_of(payload, 'msg')} path={path}",
+                f" code={code} msg={msg} path={path}",
             )
 
 
@@ -160,7 +199,9 @@ class LarkAuth(_LarkApiBase):
         """从环境变量构造；LARK_USER_ID 与 LARK_USER_KEY 至少配置一项。
 
         飞书项目 OpenAPI 的业务请求要求用户身份上下文（权限按该用户校验），
-        仅凭插件身份无法调用，故用户标识也是必填凭据。
+        仅凭插件身份无法调用，故用户标识也是必填凭据。官方约定与
+        plugin_access_token 搭配的是 X-USER-KEY；仅当没有 LARK_USER_KEY
+        时才退回 LARK_USER_ID（X-USER-ID）。
         """
         plugin_id = os.environ.get("LARK_APP_ID")
         plugin_secret = os.environ.get("LARK_APP_SECRET")
@@ -170,10 +211,10 @@ class LarkAuth(_LarkApiBase):
             )
         user_id = os.environ.get("LARK_USER_ID")
         user_key = os.environ.get("LARK_USER_KEY")
-        if user_id:
-            user_headers = {"X-USER-ID": user_id}
-        elif user_key:
+        if user_key:
             user_headers = {"X-USER-KEY": user_key}
+        elif user_id:
+            user_headers = {"X-USER-ID": user_id}
         else:
             raise CollectorError(
                 "lark_auth",
@@ -198,7 +239,7 @@ class LarkAuth(_LarkApiBase):
                     json={
                         "plugin_id": self._plugin_id,
                         "plugin_secret": self._plugin_secret,
-                        "type": _TOKEN_REQUEST_TYPE,
+                        "type": _plugin_token_type(),
                     },
                 ),
                 retry_on=(httpx.TimeoutException,),
@@ -208,19 +249,13 @@ class LarkAuth(_LarkApiBase):
                 "lark_auth", "获取 plugin_token 超时（已重试 3 次）"
             ) from exc
         payload = _safe_json(response)
-        data = _field_of(payload, "data")
-        token = _field_of(data, "token")
-        expire = _field_of(data, "expire")
-        if (
-            response.is_error
-            or _field_of(payload, "code") != 0
-            or not token
-            or not expire
-        ):
+        token, expire = _token_fields(payload)
+        code, msg = _status_of(payload)
+        if response.is_error or code not in (0, None) or not token or not expire:
             raise CollectorError(
                 "lark_auth",
                 f"获取 plugin_token 失败：HTTP {response.status_code}"
-                f" code={_field_of(payload, 'code')} msg={_field_of(payload, 'msg')}",
+                f" code={code} msg={msg} path={_PLUGIN_TOKEN_PATH}",
             )
         return str(token), float(expire)
 

@@ -9,7 +9,7 @@ from collector import lark_auth
 from collector.lark_auth import LarkAuth, LarkTenantAuth
 from shared.errors import CollectorError
 
-TOKEN_PATH = "/open_api/auth/v3/plugin_token"
+TOKEN_PATH = "/open_api/authen/plugin_token"
 
 
 def _token_response(call_no: int) -> httpx.Response:
