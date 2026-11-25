@@ -19,10 +19,8 @@
 ─────────                ──────────                    ────────
 
 GitHub API ─┐
-            │
-飞书任务 API ┼→ [采集层] → 原始数据(JSON) → [生成层] → DailyReport
-            │  Collector                    Generator     │
-飞书消息 API ┘                                            │
+            ├→ [采集层] → 原始数据(JSON) → [生成层] → DailyReport
+飞书消息 API ┘  Collector                    Generator     │
                                                           ↓
                                                     [推送层] Notifier
                                                       │        │
@@ -40,7 +38,6 @@ GitHub API ─┐
 | 文件 | 职责 | 不负责 |
 |------|------|--------|
 | github.py | 从 GitHub API 获取 commit 记录 | 数据格式化、去重判断 |
-| lark_task.py | 从飞书开放平台获取任务状态变更 | 推送通知 |
 | lark_msg.py | 从飞书群获取消息记录并按关键词过滤 | 语义理解/AI 摘要 |
 
 ### 2.2 生成层（generator/）
@@ -87,14 +84,6 @@ CommitRecord:
     deletions: int       # 删除行数
     files_changed: int   # 变更文件数
 
-# 任务变更记录
-TaskRecord:
-    assignee: str        # 飞书用户名
-    title: str           # 任务标题
-    status_from: str     # 原状态
-    status_to: str       # 新状态
-    updated_at: datetime # 变更时间
-
 # 消息记录
 MessageRecord:
     sender: str          # 飞书用户名
@@ -105,7 +94,7 @@ MessageRecord:
 # 采集结果：失败作为数据返回而非控制流，编排层据此标注「数据获取失败」
 CollectResult[T]:
     records: list[T]           # 成功采集的记录
-    failed_targets: list[str]  # 采集失败的目标（仓库 / 项目 / 群）
+    failed_targets: list[str]  # 采集失败的目标（仓库 / 群）
 ```
 
 ### 3.2 生成层输入/输出
@@ -116,7 +105,6 @@ MemberReport:
     name: str                       # 成员姓名
     github_username: str            # GitHub 用户名
     commits: list[CommitRecord]     # 代码提交
-    tasks: list[TaskRecord]         # 任务变更
     messages: list[MessageRecord]   # 相关消息
 
 # 日报（生成层输出）
@@ -150,9 +138,6 @@ members:
 ```python
 # github.py
 def collect(repos: list[str], since: datetime, until: datetime) -> CollectResult[CommitRecord]
-
-# lark_task.py
-def collect(project_id: str, since: datetime, until: datetime) -> CollectResult[TaskRecord]
 
 # lark_msg.py
 def collect(chat_id: str, keywords: list[str], since: datetime, until: datetime) -> CollectResult[MessageRecord]
@@ -233,4 +218,6 @@ def send(report: DailyReport, chat_id: str) -> bool
 
 ---
 
-*规范版本：v1.0 | 对应《规范驱动开发》第 5 章*
+*规范版本：v1.1 | 对应《规范驱动开发》第 5 章*
+
+*变更记录：v1.1（2026-11-25）移除飞书任务采集（lark_task.py）、TaskRecord 模型与 lark_task.collect 契约，对应 proposal v1.1。*

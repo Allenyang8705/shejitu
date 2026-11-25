@@ -1,13 +1,13 @@
 
 # 智能日报生成器（AutoDaily Generator）
 
-Python 3.11+ / SQLite / cron 的内部工具：从 GitHub 与飞书采集当日工作数据，生成"代码提交 → 任务进展 → 协作沟通"三段式 Markdown 日报，经 SMTP 邮件和飞书机器人推送。面向 5~15 人研发团队。需求与验收见 `specs/proposal.md`，技术设计见 `specs/design.md`，任务拆解见 `specs/tasks.md`（三者经文末导入自动加载）。
+Python 3.11+ / SQLite / cron 的内部工具：从 GitHub 与飞书采集当日工作数据，生成"代码提交 → 协作沟通"两段式 Markdown 日报，经 SMTP 邮件和飞书机器人推送。面向 5~15 人研发团队。需求与验收见 `specs/proposal.md`，技术设计见 `specs/design.md`，任务拆解见 `specs/tasks.md`（三者经文末导入自动加载）。
 
 ## 项目规范
 所有开发工作必须遵循以下规范文档：
 - 需求规范：specs/proposal.md（做什么、验收清单）
 - 技术设计：specs/design.md（模块职责、数据模型、接口契约、ADR、非功能约束）
-- 任务清单：specs/tasks.md（10 个任务的依赖顺序、输入输出、验收标准）
+- 任务清单：specs/tasks.md（任务的依赖顺序、输入输出、验收标准；Task 4 已裁剪）
 - 执行工作流：specs/workflow.md（逐任务指令模板与速查表）
 - 三份文档出现不一致时（如目录结构、模块命名、接口签名），先停下来向用户确认，不自行取舍
 
@@ -25,12 +25,12 @@ Python 3.11+ / SQLite / cron 的内部工具：从 GitHub 与飞书采集当日�
 
 ## 目录结构（对应 design.md §2 与 tasks.md Task 1）
 
-- `collector/` — 数据采集，每个数据源一个模块：`github.py` / `lark_task.py` / `lark_msg.py`
+- `collector/` — 数据采集，每个数据源一个模块：`github.py` / `lark_msg.py`；另有 `lark_auth.py`（飞书鉴权收拢，供 lark_msg 复用，非独立数据源）
 - `generator/` — 日报生成：`formatter.py`（整理为 MemberReport，输出 Markdown/HTML）/ `template.py`（模板管理）
 - `notifier/` — 推送通道：`email.py`（SMTP 邮件）/ `lark_bot.py`（飞书机器人 webhook）
 - `shared/` — 共享基础层：`config.py`（读取并校验 config.yaml）/ `logger.py`（JSON lines 日志）/ `errors.py`（自定义异常）/ `storage.py`（SQLite 存取）/ `models.py`（跨层领域模型，定义见 design.md §3）/ `workday.py`（工作日判断：周末 + 法定节假日，proposal 3.3）
 - `main.py` — 编排入口：采集 → 聚合 → 生成 → 推送，支持 `--check` / `--dry-run`
-- `tests/` — 测试，文件与被测模块一一对应（test_github.py、test_lark_task.py、…、test_integration.py）
+- `tests/` — 测试，文件与被测模块一一对应（test_github.py、test_lark_msg.py、…、test_integration.py）
 - `specs/` — 规范文档：`proposal.md` / `design.md` / `tasks.md` / `workflow.md`
 - `data/` — SQLite 数据库（`data/autodaily.db`）及运行产物（gitignore，不入库）
 - `config.yaml.example` — 配置模板（入库）；真实 `config.yaml` 从模板复制生成，不入库
@@ -53,7 +53,7 @@ Python 3.11+ / SQLite / cron 的内部工具：从 GitHub 与飞书采集当日�
 
 ## 工作流规则
 
-- 实现顺序遵循 specs/tasks.md 的依赖链：T1 → T2 → T3/T4/T5（可并行）→ T6 → T7/T8（可并行）→ T9 → T10；逐任务指令模板见 specs/workflow.md
+- 实现顺序遵循 specs/tasks.md 的依赖链：T1 → T2 → T3/T5（可并行）→ T6 → T7/T8（可并行）→ T9 → T10；逐任务指令模板见 specs/workflow.md
 - 每个任务完成后，对照 tasks.md 中该任务的验收标准逐条自验；功能改动另对照 proposal.md 第 3 节验收清单，并在汇报中说明结果
 - 改动完成后依次跑 lint → typecheck → 相关测试，全部通过再汇报
 - 新功能必须附带测试；修 bug 先写复现测试再修
