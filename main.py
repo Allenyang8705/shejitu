@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
 
-from collector import github, lark_auth, lark_msg, lark_task
+from collector import github, lark_auth, lark_msg
 from generator.formatter import generate
 from notifier import email, lark_bot
 from shared import logger
@@ -28,7 +28,6 @@ from shared.models import (
     CommitRecord,
     MemberReport,
     MessageRecord,
-    TaskRecord,
 )
 from shared.storage import Storage
 from shared.workday import is_workday
@@ -36,6 +35,8 @@ from shared.workday import is_workday
 _VIEW_TZ = timezone(timedelta(hours=8))  # 与 formatter 一致：受众为中国团队
 _GITHUB_CHECK_URL = "https://api.github.com/rate_limit"
 _SMTP_ENV_KEYS = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM")
+# 数据源清单：全源失败判定据此比较，避免散落的源数量魔法数字
+_COLLECT_SOURCES = {"github", "lark_msg"}
 
 
 def _placeholder_fields(cfg: Config) -> list[str]:
@@ -45,12 +46,11 @@ def _placeholder_fields(cfg: Config) -> list[str]:
         fields.append("team_name")
     if any("your-org/" in repo or repo.endswith("/your-repo") for repo in cfg.repos):
         fields.append("repos")
-    if cfg.lark_project_id == "your-project-id":
-        fields.append("lark_project_id")
     if any("xxxx" in chat.chat_id for chat in cfg.chats):
         fields.append("chats")
     if any(
-        member.github in {"zhangsan", "lisi-dev"} or member.lark.endswith("@company.com")
+        member.github in {"zhangsan", "lisi-dev"}
+        or member.lark.endswith("@company.com")
         for member in cfg.members
     ):
         fields.append("members")
@@ -67,13 +67,12 @@ def _collect_window(now_utc: datetime) -> tuple[datetime, datetime]:
 def _aggregate(
     cfg: Config,
     github_result: CollectResult[CommitRecord],
-    task_result: CollectResult[TaskRecord],
     messages: list[MessageRecord],
     msg_failed: list[str],
 ) -> tuple[list[MemberReport], bool]:
-    """按身份映射聚合到成员；返回 (成员列表, 是否三源全部失败)。
+    """按身份映射聚合到成员；返回 (成员列表, 是否所有数据源全部失败)。
 
-    GitHub 按 members[].github 匹配；飞书侧 assignee / sender 为显示名，
+    GitHub 按 members[].github 匹配；飞书侧 sender 为显示名，
     按 members[].name 精确匹配（部署要求 config 姓名与飞书显示名一致）。
     聚合不到的记录丢弃并记日志，避免未知账号撑爆日报。
     """
@@ -90,12 +89,6 @@ def _aggregate(
             logger.info("aggregate_unmatched", source="github", key=record.author)
             continue
         reports[member.name].commits.append(record)
-    for task in task_result.records:
-        member = by_name.get(task.assignee)
-        if member is None:
-            logger.info("aggregate_unmatched", source="lark_task", key=task.assignee)
-            continue
-        reports[member.name].tasks.append(task)
     for message in messages:
         member = by_name.get(message.sender)
         if member is None:
@@ -106,13 +99,11 @@ def _aggregate(
     failed_sources = []
     if github_result.failed_targets:
         failed_sources.append("github")
-    if task_result.failed_targets:
-        failed_sources.append("lark_task")
     if msg_failed:
         failed_sources.append("lark_msg")
     for report in reports.values():
         report.failed_sources = list(failed_sources)
-    return list(reports.values()), len(failed_sources) == 3
+    return list(reports.values()), set(failed_sources) == _COLLECT_SOURCES
 
 
 def _log_end(started: datetime, exit_code: int) -> None:
@@ -141,14 +132,6 @@ def run_pipeline(dry_run: bool) -> int:
         failed=github_result.failed_targets,
     )
 
-    task_result = lark_task.collect(cfg.lark_project_id, since, until)
-    logger.info(
-        "collect_done",
-        source="lark_task",
-        count=len(task_result.records),
-        failed=task_result.failed_targets,
-    )
-
     messages: list[MessageRecord] = []
     msg_failed: list[str] = []
     for chat in cfg.chats:
@@ -159,13 +142,11 @@ def run_pipeline(dry_run: bool) -> int:
         "collect_done", source="lark_msg", count=len(messages), failed=msg_failed
     )
 
-    members, all_failed = _aggregate(
-        cfg, github_result, task_result, messages, msg_failed
-    )
+    members, all_failed = _aggregate(cfg, github_result, messages, msg_failed)
     if all_failed:
         logger.error(
             "pipeline_abort_all_sources_failed",
-            sources=["github", "lark_task", "lark_msg"],
+            sources=sorted(_COLLECT_SOURCES),
         )
         _log_end(started, 1)
         return 1
@@ -230,7 +211,7 @@ def run_check() -> int:
                 "check_config_placeholder",
                 ok=False,
                 fields=placeholders,
-                hint="config.yaml 仍含模板占位值，请换成真实仓库、群、项目和成员",
+                hint="config.yaml 仍含模板占位值，请换成真实仓库、群和成员",
             )
         else:
             logger.info("check_config_placeholder", ok=True)
@@ -246,10 +227,6 @@ def run_check() -> int:
         optional=True,
     )
     if not _check_env_group("lark_app", ("LARK_APP_ID", "LARK_APP_SECRET")):
-        failures += 1
-    if not _check_env_group(
-        "lark_user", ("LARK_USER_ID", "LARK_USER_KEY"), any_of=True
-    ):
         failures += 1
     if not _check_env_group("smtp", _SMTP_ENV_KEYS):
         failures += 1
@@ -272,18 +249,6 @@ def run_check() -> int:
         failures += 1
     else:
         logger.info("check_connectivity", target="github", ok=True)
-
-    try:
-        lark_auth.get_lark_auth().request_headers()
-        logger.info("check_connectivity", target="lark_project_token", ok=True)
-    except AutoDailyError as exc:
-        failures += 1
-        logger.error(
-            "check_connectivity",
-            target="lark_project_token",
-            ok=False,
-            error=exc.message,
-        )
 
     try:
         lark_auth.get_lark_tenant_auth().request_headers()

@@ -23,17 +23,6 @@ class CommitRecord:
 
 
 @dataclass
-class TaskRecord:
-    """任务状态变更记录（design.md §3.1）。"""
-
-    assignee: str
-    title: str
-    status_from: str
-    status_to: str
-    updated_at: datetime
-
-
-@dataclass
 class MessageRecord:
     """群消息记录（design.md §3.1）。"""
 
@@ -50,7 +39,7 @@ _T = TypeVar("_T")
 class CollectResult(Generic[_T]):
     """采集结果（design.md §3.1）：失败作为数据返回，而非控制流。
 
-    records 为成功采集的记录；failed_targets 列出失败的目标（仓库 / 项目 / 群），
+    records 为成功采集的记录；failed_targets 列出失败的目标（仓库 / 群），
     编排层据此在日报中标注「数据获取失败」，并可区分部分失败与全部失败。
     """
 
@@ -62,9 +51,9 @@ class CollectResult(Generic[_T]):
 class MemberReport:
     """成员日报聚合（design.md §3.2，生成层输入）。
 
-    failed_sources 是 design.md §3.2 之外补充的字段：tasks.md T3~T5 约定
+    failed_sources 是 design.md §3.2 之外补充的字段：tasks.md T3/T5 约定
     采集失败时返回空列表，因此「失败」无法用空列表本身表达，只能经由本
-    字段传递（标识取 collector 模块名：github / lark_task / lark_msg）。
+    字段传递（标识取 collector 模块名：github / lark_msg）。
     生成层据此区分两种展示：空列表表示采集成功但当日无记录（今日无记录），
     源出现在 failed_sources 中则标注「数据获取失败」（tasks.md Task 6）。
     """
@@ -72,7 +61,6 @@ class MemberReport:
     name: str
     github_username: str
     commits: list[CommitRecord] = field(default_factory=list)
-    tasks: list[TaskRecord] = field(default_factory=list)
     messages: list[MessageRecord] = field(default_factory=list)
     failed_sources: list[str] = field(default_factory=list)
 

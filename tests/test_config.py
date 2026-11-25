@@ -15,7 +15,6 @@ BASE_CONFIG = {
     "team_name": "测试团队",
     "repos": ["org/repo"],
     "chats": [{"chat_id": "oc_test", "name": "项目群"}],
-    "lark_project_id": "proj-001",
     "message_keywords": ["进度"],
     "sensitive_keywords": ["薪资"],
     "members": [{"name": "张三", "github": "zhangsan", "lark": "zhangsan@company.com"}],
@@ -38,7 +37,6 @@ def test_load_example_succeeds():
     assert config.team_name == "示例团队"
     assert config.repos == ["your-org/your-repo"]
     assert config.chats[0].chat_id.startswith("oc_")
-    assert config.lark_project_id
     assert config.message_keywords
     assert config.sensitive_keywords == ["薪资", "绩效", "裁员"]
     assert len(config.members) == 2
@@ -120,12 +118,6 @@ def test_get_config_caches_until_reset(tmp_path):
     reset_config()
     assert get_config(path) is not first
     reset_config()
-
-
-def test_work_item_types_default_when_missing(tmp_path):
-    """lark_work_item_types 未配置时回退到平台内置三类型。"""
-    path = _write_config(tmp_path)
-    assert load_config(path).lark_work_item_types == ["task", "bug", "story"]
 
 
 def test_invalid_holiday_date_rejected(tmp_path):

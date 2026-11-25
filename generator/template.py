@@ -32,17 +32,6 @@ _MARKDOWN_SOURCE = """\
 今日无记录
 {% endif %}
 
-### 任务进展
-{% if member.tasks_failed %}
-> ⚠ {{ member.tasks_failed_label }}
-{% endif %}
-{% for task in member.tasks %}
-- {{ task.time }} {{ task.title }}：{{ task.transition }}
-{% endfor %}
-{% if not member.tasks and not member.tasks_failed %}
-今日无记录
-{% endif %}
-
 ### 协作沟通
 {% if member.messages_failed %}
 > ⚠ {{ member.messages_failed_label }}
@@ -86,15 +75,6 @@ _HTML_SOURCE = """\
       <ul>
         {% for commit in member.commits %}
         <li><code>{{ commit.repo }}</code> {{ commit.time }}（+{{ commit.additions }}/-{{ commit.deletions }}）{{ commit.message }}</li>
-        {% endfor %}
-      </ul>
-      {% else %}<p class="empty">今日无记录</p>{% endif %}
-      <h3>任务进展</h3>
-      {% if member.tasks_failed %}<p class="failed">⚠ {{ member.tasks_failed_label }}</p>{% endif %}
-      {% if member.tasks %}
-      <ul>
-        {% for task in member.tasks %}
-        <li>{{ task.time }} {{ task.title }}：{{ task.transition }}</li>
         {% endfor %}
       </ul>
       {% else %}<p class="empty">今日无记录</p>{% endif %}

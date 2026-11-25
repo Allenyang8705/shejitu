@@ -35,8 +35,6 @@ def _ms(dt: datetime) -> int:
 def _config(sensitive: list[str]) -> Config:
     return Config(
         team_name="t",
-        lark_project_id="p",
-        lark_work_item_types=["task"],
         repos=[],
         chats=[],
         message_keywords=[],
@@ -374,7 +372,8 @@ def test_timeout_exhausted_marks_failed(monkeypatch):
 
 
 def test_missing_credentials_marks_failed(monkeypatch):
-    for key in ("LARK_APP_ID", "LARK_APP_SECRET", "LARK_USER_ID", "LARK_USER_KEY"):
+    # 消息采集走主站 tenant 鉴权，只需 LARK_APP_ID / LARK_APP_SECRET
+    for key in ("LARK_APP_ID", "LARK_APP_SECRET"):
         monkeypatch.delenv(key, raising=False)
     # 不替换 _get_auth，走真实单例构造路径验证凭据缺失的降级行为
 

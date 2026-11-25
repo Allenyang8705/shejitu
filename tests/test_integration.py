@@ -22,7 +22,6 @@ from shared.models import (
     CollectResult,
     CommitRecord,
     MessageRecord,
-    TaskRecord,
 )
 
 T1 = datetime(2026, 11, 20, 8, 30, tzinfo=UTC)
@@ -31,8 +30,6 @@ T1 = datetime(2026, 11, 20, 8, 30, tzinfo=UTC)
 def _config(email_recipients: list[str] | None = None) -> Config:
     return Config(
         team_name="研发团队",
-        lark_project_id="proj-1",
-        lark_work_item_types=["task"],
         repos=["org/repo"],
         chats=[ChatConfig(chat_id="oc-1", name="项目群")],
         message_keywords=["进度"],
@@ -57,16 +54,6 @@ def _commit(author: str) -> CommitRecord:
     )
 
 
-def _task(assignee: str) -> TaskRecord:
-    return TaskRecord(
-        assignee=assignee,
-        title="导出功能",
-        status_from="进行中",
-        status_to="已完成",
-        updated_at=T1,
-    )
-
-
 def _message(sender: str) -> MessageRecord:
     return MessageRecord(
         sender=sender, content="讨论了联调进度", timestamp=T1, chat_name="项目群"
@@ -87,11 +74,9 @@ def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> SimpleNamespace:
 def _patch_collectors(
     monkeypatch: pytest.MonkeyPatch,
     github_result: CollectResult[Any],
-    task_result: CollectResult[Any],
     msg_result: CollectResult[Any],
 ) -> None:
     monkeypatch.setattr(main.github, "collect", lambda *args, **kwargs: github_result)
-    monkeypatch.setattr(main.lark_task, "collect", lambda *args, **kwargs: task_result)
     monkeypatch.setattr(main.lark_msg, "collect", lambda *args, **kwargs: msg_result)
 
 
@@ -111,11 +96,10 @@ def _saved_rows(db_path: Any) -> list[tuple]:
 
 
 def test_full_pipeline_success(monkeypatch, env):
-    """tasks.md 场景 1：三源可用，日报生成、落库并推送成功；耗时 < 60 秒。"""
+    """tasks.md 场景 1：两源可用，日报生成、落库并推送成功；耗时 < 60 秒。"""
     _patch_collectors(
         monkeypatch,
         CollectResult(records=[_commit("zhangsan")], failed_targets=[]),
-        CollectResult(records=[_task("张三")], failed_targets=[]),
         CollectResult(records=[_message("张三")], failed_targets=[]),
     )
     monkeypatch.setattr(
@@ -156,7 +140,6 @@ def test_degraded_source_annotated_dry_run(monkeypatch, env):
     _patch_collectors(
         monkeypatch,
         CollectResult(records=[], failed_targets=["org/broken"]),
-        CollectResult(records=[_task("张三")], failed_targets=[]),
         CollectResult(records=[_message("张三")], failed_targets=[]),
     )
     exit_code = main.main(["--dry-run"])
@@ -165,14 +148,13 @@ def test_degraded_source_annotated_dry_run(monkeypatch, env):
     rows = _saved_rows(env.db_path)
     assert len(rows) == 1
     assert "GitHub 数据获取失败" in rows[0][2]
-    assert "导出功能" in rows[0][2]  # 其余源数据正常呈现
+    assert "讨论了联调进度" in rows[0][2]  # 其余源数据正常呈现
 
 
 def test_empty_data_still_reports(monkeypatch, env):
     """tasks.md 场景 3：成员无任何记录 → 显示「今日无记录」，报告仍生成。"""
     _patch_collectors(
         monkeypatch,
-        CollectResult(records=[], failed_targets=[]),
         CollectResult(records=[], failed_targets=[]),
         CollectResult(records=[], failed_targets=[]),
     )
@@ -192,7 +174,6 @@ def test_all_sources_failed_no_report(monkeypatch, env):
     _patch_collectors(
         monkeypatch,
         CollectResult(records=[], failed_targets=["org/a"]),
-        CollectResult(records=[], failed_targets=["proj-1"]),
         CollectResult(records=[], failed_targets=["oc-1"]),
     )
     try:
@@ -211,7 +192,6 @@ def test_push_failure_exit_code(monkeypatch, env):
     _patch_collectors(
         monkeypatch,
         CollectResult(records=[_commit("zhangsan")], failed_targets=[]),
-        CollectResult(records=[], failed_targets=[]),
         CollectResult(records=[], failed_targets=[]),
     )
     monkeypatch.setattr(

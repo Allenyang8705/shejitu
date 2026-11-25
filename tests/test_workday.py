@@ -11,8 +11,6 @@ def _config(
 ) -> Config:
     return Config(
         team_name="t",
-        lark_project_id="p",
-        lark_work_item_types=["task"],
         repos=[],
         chats=[],
         message_keywords=[],

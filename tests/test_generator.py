@@ -6,7 +6,7 @@ import pytest
 
 from generator import formatter, template
 from shared.errors import GeneratorError
-from shared.models import CommitRecord, MemberReport, MessageRecord, TaskRecord
+from shared.models import CommitRecord, MemberReport, MessageRecord
 
 DAY = date(2026, 11, 20)
 # UTC 08:30 → UTC+8 16:30（同日）
@@ -20,17 +20,15 @@ def _member(**overrides: object) -> MemberReport:
     return MemberReport(**params)
 
 
-def test_markdown_contains_three_sections():
+def test_markdown_contains_two_sections():
     member = _member(
         commits=[CommitRecord("zhangsan", "feat: 新增导出", T1, "org/repo", 10, 4, 2)],
-        tasks=[TaskRecord("张三", "导出功能", "进行中", "已完成", T1)],
         messages=[MessageRecord("李四", "讨论了联调进度", T2, "项目群")],
     )
     report = formatter.generate([member], DAY, "示例团队")
 
     assert "# 示例团队 日报（2026-11-20）" in report.markdown
     assert "### 代码提交" in report.markdown
-    assert "### 任务进展" in report.markdown
     assert "### 协作沟通" in report.markdown
 
 
@@ -46,20 +44,6 @@ def test_commit_line_details():
 
     # 只取首行；时间转为 UTC+8；统计口径为增删行数
     assert "- `org/repo` 16:30（+10/-4）feat: 新增导出" in report.markdown
-
-
-def test_task_transition_line():
-    member = _member(
-        tasks=[
-            TaskRecord("张三", "导出功能", "进行中", "已完成", T1),
-            TaskRecord("张三", "权限修复", "", "待处理", T2),
-        ]
-    )
-    report = formatter.generate([member], DAY, "示例团队")
-
-    assert "- 16:30 导出功能：进行中 → 已完成" in report.markdown
-    # 新建流转没有原状态，展示为「新建」
-    assert "- 17:00 权限修复：新建 → 待处理" in report.markdown
 
 
 def test_message_truncated_and_chat_shown(monkeypatch):
@@ -82,7 +66,7 @@ def test_no_record_member_is_compact():
 
     assert "## 李四" in report.markdown
     assert "今日无记录" in report.markdown
-    # 完全无记录的成员不展开三个板块标题
+    # 完全无记录的成员不展开板块标题
     assert "### 代码提交" not in report.markdown
 
 
@@ -92,8 +76,8 @@ def test_failed_source_annotation():
 
     assert "GitHub 数据获取失败" in report.markdown
     assert "### 代码提交" in report.markdown
-    # 其余两个空板块显示「今日无记录」，不被失败标注覆盖
-    assert report.markdown.count("今日无记录") == 2
+    # 另一个空板块显示「今日无记录」，不被失败标注覆盖
+    assert report.markdown.count("今日无记录") == 1
 
 
 def test_failed_source_with_partial_records():
@@ -121,7 +105,6 @@ def test_html_structure_and_escaping():
     assert report.html.startswith("<!DOCTYPE html>")
     assert "<h2>张三</h2>" in report.html
     assert "<h3>代码提交</h3>" in report.html
-    assert "<h3>任务进展</h3>" in report.html
     assert "<h3>协作沟通</h3>" in report.html
     # 群聊原文进 HTML 前必须转义（design.md §6.2）
     assert "<script>alert(1)</script>" not in report.html

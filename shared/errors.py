@@ -25,7 +25,7 @@ class ConfigError(AutoDailyError):
 
 
 class CollectorError(AutoDailyError):
-    """数据采集失败（source 取 github / lark_task / lark_msg）。"""
+    """数据采集失败（source 取 github / lark_msg）。"""
 
 
 class GeneratorError(AutoDailyError):

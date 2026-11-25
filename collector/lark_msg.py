@@ -2,7 +2,7 @@
 
 获取指定飞书群在时间窗口内的消息，按关键词白名单过滤并剔除敏感词后
 映射为 MessageRecord。群消息属于飞书开放平台主站（IM API），鉴权走
-LarkTenantAuth，与飞书项目平台（lark_task）是两套体系。
+LarkTenantAuth。
 
 过滤语义（proposal 2.1 / design.md §6.2）：
 - 入参 keywords 为采集白名单：消息包含任一关键词才保留；为空表示该源
@@ -11,7 +11,7 @@ LarkTenantAuth，与飞书项目平台（lark_task）是两套体系。
 - 机器人 / 应用消息不属于成员讨论（且可能包含本工具自己推送的日报），
   一律跳过；图片 / 文件 / 卡片等非文本消息同样跳过。
 
-失败语义同 github.py / lark_task.py：失败作为数据返回（CollectResult），
+失败语义同 github.py：失败作为数据返回（CollectResult），
 CollectorError 仅用于契约违规。
 
 端点核对点：主平台 IM 接口为通用稳定接口，置信度高于飞书项目部分；
@@ -44,7 +44,7 @@ def _get_auth() -> LarkTenantAuth:
 def _ms_to_datetime(value: Any) -> datetime:
     """飞书毫秒时间戳 → aware UTC datetime（时间统一约定）。
 
-    设计规定各采集模块互不依赖，与 lark_task 的同名实现保持独立。
+    设计规定各采集模块互不依赖，同名实现保持独立。
     """
     return datetime.fromtimestamp(int(float(value)) / 1000, tz=UTC)
 

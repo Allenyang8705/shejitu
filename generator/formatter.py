@@ -17,7 +17,7 @@ _VIEW_TZ = timezone(timedelta(hours=8))  # 受众为中国团队，固定 UTC+8 
 _TRUNCATE_LIMIT = 100  # 消息与提交首行截断长度，防止长文本撑爆日报
 
 # failed_sources 标识（collector 模块名）→ 日报展示名
-_SOURCE_LABELS = {"github": "GitHub", "lark_task": "飞书任务", "lark_msg": "飞书消息"}
+_SOURCE_LABELS = {"github": "GitHub", "lark_msg": "飞书消息"}
 
 
 def _display_time(value: datetime) -> str:
@@ -51,15 +51,6 @@ def _build_member_view(member: MemberReport) -> dict[str, Any]:
         }
         for commit in member.commits
     ]
-    tasks = [
-        {
-            "time": _display_time(task.updated_at),
-            "title": _truncate(task.title),
-            # 新建流转没有原状态，展示为「新建」
-            "transition": f"{task.status_from or '新建'} → {task.status_to}",
-        }
-        for task in member.tasks
-    ]
     messages = [
         {
             "time": _display_time(message.timestamp),
@@ -72,15 +63,12 @@ def _build_member_view(member: MemberReport) -> dict[str, Any]:
     return {
         "name": member.name,
         "commits": commits,
-        "tasks": tasks,
         "messages": messages,
         "commits_failed": "github" in member.failed_sources,
         "commits_failed_label": _failure_note("github"),
-        "tasks_failed": "lark_task" in member.failed_sources,
-        "tasks_failed_label": _failure_note("lark_task"),
         "messages_failed": "lark_msg" in member.failed_sources,
         "messages_failed_label": _failure_note("lark_msg"),
-        "has_any": bool(commits or tasks or messages or member.failed_sources),
+        "has_any": bool(commits or messages or member.failed_sources),
     }
 
 
